@@ -7,6 +7,8 @@ let fixFileContent = null;
 let navFileContent = null;
 let currentMode = "WAYPOINT";
 let pendingCalculationParams = null;
+let waypointMap = null;
+let fixMap = null;
 
 // DOM elements
 document.addEventListener('DOMContentLoaded', function() {
@@ -81,6 +83,26 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('clear-btn').addEventListener('click', clearFields);
     document.getElementById('copy-btn').addEventListener('click', copyOutput);
     
+    // Toggle map buttons
+    document.getElementById('toggle-map-waypoint').addEventListener('click', function() {
+        toggleMap('waypoint');
+    });
+    document.getElementById('toggle-map-fix').addEventListener('click', function() {
+        toggleMap('fix');
+    });
+    
+    // Export button and options
+    document.getElementById('export-btn').addEventListener('click', showExportModal);
+    document.getElementById('export-json').addEventListener('click', function() {
+        exportData('json');
+    });
+    document.getElementById('export-csv').addEventListener('click', function() {
+        exportData('csv');
+    });
+    document.getElementById('export-txt').addEventListener('click', function() {
+        exportData('txt');
+    });
+    
     // Initialize form validation
     setupFormValidation();
     
@@ -98,6 +120,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Setup shortcuts modal
     setupShortcutsModal();
+    
+    // Initialize maps
+    initializeMaps();
 });
 
 // File handling functions
@@ -1064,6 +1089,16 @@ function setupKeyboardShortcuts() {
                 case 'd': // Toggle dark mode
                     toggleTheme();
                     break;
+                case 'm': // Toggle map
+                    if (currentMode === "WAYPOINT") {
+                        toggleMap('waypoint');
+                    } else {
+                        toggleMap('fix');
+                    }
+                    break;
+                case 'e': // Show export options
+                    showExportModal();
+                    break;
                 // Other shortcuts are handled by accesskey attribute
             }
         }
@@ -1072,6 +1107,7 @@ function setupKeyboardShortcuts() {
         if (e.key === 'Escape') {
             document.getElementById('modal').style.display = 'none';
             document.getElementById('shortcuts-modal').style.display = 'none';
+            document.getElementById('export-modal').style.display = 'none';
         }
     });
 }
@@ -1103,4 +1139,274 @@ function toggleShortcutsModal() {
     if (shortcutsModal.style.display === 'block') {
         shortcutsModal.querySelector('.close').focus();
     }
+}
+
+// Toggle map functionality
+function toggleMap(mode) {
+    const mapPreview = document.getElementById(`${mode}-map-preview`);
+    const mapContainer = document.getElementById(`${mode}-map`);
+    const toggleButton = document.getElementById(`toggle-map-${mode}`);
+    const buttonText = toggleButton.querySelector('span');
+    
+    if (mapPreview.classList.contains('show')) {
+        mapPreview.classList.remove('show');
+        toggleButton.classList.remove('active');
+        buttonText.textContent = 'Show Map';
+    } else {
+        mapPreview.classList.add('show');
+        toggleButton.classList.add('active');
+        buttonText.textContent = 'Hide Map';
+        
+        // Initialize or update map
+        if (mode === 'waypoint') {
+            updateWaypointMap();
+        } else {
+            updateFixMap();
+        }
+    }
+}
+
+function initializeMaps() {
+    // Initialize waypoint map
+    waypointMap = L.map('waypoint-map', {
+        center: [0, 0],
+        zoom: 2
+    });
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(waypointMap);
+    
+    // Initialize fix map
+    fixMap = L.map('fix-map', {
+        center: [0, 0],
+        zoom: 2
+    });
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(fixMap);
+}
+
+function updateWaypointMap() {
+    const coordsStr = document.getElementById('waypoint-coords').value.trim();
+    if (!coordsStr) {
+        document.getElementById('waypoint-map-placeholder').style.display = 'flex';
+        return;
+    }
+    
+    try {
+        const [lat, lon] = coordsStr.split(/\s+/).map(parseFloat);
+        if (isNaN(lat) || isNaN(lon)) throw new Error("Invalid coordinates");
+        
+        document.getElementById('waypoint-map-placeholder').style.display = 'none';
+        
+        waypointMap.setView([lat, lon], 10);
+        
+        // Clear existing markers
+        waypointMap.eachLayer(layer => {
+            if (layer instanceof L.Marker) {
+                waypointMap.removeLayer(layer);
+            }
+        });
+        
+        // Add marker for the VOR/DME position
+        L.marker([lat, lon])
+            .addTo(waypointMap)
+            .bindPopup('VOR/DME Position')
+            .openPopup();
+        
+        // If there's a calculated waypoint, add it too
+        const outputText = document.getElementById('output-result').value.trim();
+        if (outputText) {
+            const parts = outputText.split(/\s+/);
+            if (parts.length >= 2) {
+                const [wpLat, wpLon] = parts.map(parseFloat);
+                if (!isNaN(wpLat) && !isNaN(wpLon)) {
+                    L.marker([wpLat, wpLon], {
+                        icon: L.divIcon({
+                            className: 'waypoint-marker',
+                            html: '<i class="fas fa-crosshairs"></i>',
+                            iconSize: [20, 20]
+                        })
+                    })
+                    .addTo(waypointMap)
+                    .bindPopup('Calculated Waypoint')
+                    .openPopup();
+                    
+                    // Draw a line between points
+                    L.polyline([[lat, lon], [wpLat, wpLon]], {
+                        color: 'blue',
+                        weight: 2,
+                        opacity: 0.7,
+                        dashArray: '5, 5'
+                    }).addTo(waypointMap);
+                    
+                    // Adjust map to show both points
+                    waypointMap.fitBounds([
+                        [lat, lon],
+                        [wpLat, wpLon]
+                    ], { padding: [50, 50] });
+                }
+            }
+        }
+        
+        // Force map to refresh
+        waypointMap.invalidateSize();
+        
+    } catch (error) {
+        document.getElementById('waypoint-map-placeholder').style.display = 'flex';
+        document.getElementById('waypoint-map-placeholder').textContent = 'Invalid coordinates format';
+    }
+}
+
+function updateFixMap() {
+    const coordsStr = document.getElementById('fix-coords').value.trim();
+    if (!coordsStr) {
+        document.getElementById('fix-map-placeholder').style.display = 'flex';
+        return;
+    }
+    
+    try {
+        const [lat, lon] = coordsStr.split(/\s+/).map(parseFloat);
+        if (isNaN(lat) || isNaN(lon)) throw new Error("Invalid coordinates");
+        
+        document.getElementById('fix-map-placeholder').style.display = 'none';
+        
+        fixMap.setView([lat, lon], 10);
+        
+        // Clear existing markers
+        fixMap.eachLayer(layer => {
+            if (layer instanceof L.Marker) {
+                fixMap.removeLayer(layer);
+            }
+        });
+        
+        // Add marker for the fix position
+        L.marker([lat, lon], {
+            icon: L.divIcon({
+                className: 'fix-marker',
+                html: '<i class="fas fa-map-marker-alt"></i>',
+                iconSize: [20, 20]
+            })
+        })
+        .addTo(fixMap)
+        .bindPopup('Fix Position')
+        .openPopup();
+        
+        // Force map to refresh
+        fixMap.invalidateSize();
+        
+    } catch (error) {
+        document.getElementById('fix-map-placeholder').style.display = 'flex';
+        document.getElementById('fix-map-placeholder').textContent = 'Invalid coordinates format';
+    }
+}
+
+// Export functionality
+function showExportModal() {
+    const outputText = document.getElementById('output-result').value.trim();
+    
+    if (!outputText) {
+        showNotification('No data to export!', 'error');
+        return;
+    }
+    
+    const exportModal = document.getElementById('export-modal');
+    exportModal.style.display = 'block';
+    
+    // Set modal aria-hidden attribute
+    exportModal.setAttribute('aria-hidden', 'false');
+    
+    // Handle Escape key for closing modal
+    exportModal.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') {
+            exportModal.style.display = 'none';
+            exportModal.setAttribute('aria-hidden', 'true');
+            exportModal.removeEventListener('keydown', escHandler);
+        }
+    });
+    
+    // Add click event for closing
+    const closeBtn = exportModal.querySelector('.close');
+    closeBtn.addEventListener('click', function() {
+        exportModal.style.display = 'none';
+        exportModal.setAttribute('aria-hidden', 'true');
+    });
+}
+
+function exportData(format) {
+    const outputText = document.getElementById('output-result').value.trim();
+    
+    if (!outputText) {
+        showNotification('No data to export!', 'error');
+        return;
+    }
+    
+    // Parse data from output
+    const parts = outputText.split(/\s+/);
+    let exportContent = '';
+    let filename = '';
+    
+    switch (format) {
+        case 'json':
+            // Create JSON format
+            const jsonData = {
+                mode: currentMode,
+                coordinates: {
+                    latitude: parseFloat(parts[0]),
+                    longitude: parseFloat(parts[1])
+                },
+                identifier: parts[2],
+                airportCode: parts[3],
+                regionCode: parts[4],
+                operationCode: parts[5] || '',
+                rawData: outputText
+            };
+            
+            exportContent = JSON.stringify(jsonData, null, 2);
+            filename = `aviation_data_${new Date().toISOString().slice(0, 10)}.json`;
+            break;
+            
+        case 'csv':
+            // Create CSV format
+            const headers = ['Latitude', 'Longitude', 'Identifier', 'Airport', 'Region', 'Operation', 'RawData'];
+            const values = [
+                parts[0],
+                parts[1],
+                parts[2],
+                parts[3],
+                parts[4],
+                parts[5] || '',
+                outputText
+            ];
+            
+            exportContent = headers.join(',') + '\n' + values.join(',');
+            filename = `aviation_data_${new Date().toISOString().slice(0, 10)}.csv`;
+            break;
+            
+        case 'txt':
+        default:
+            // Just plain text
+            exportContent = outputText;
+            filename = `aviation_data_${new Date().toISOString().slice(0, 10)}.txt`;
+            break;
+    }
+    
+    // Create and trigger download
+    const blob = new Blob([exportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    // Close the export modal
+    document.getElementById('export-modal').style.display = 'none';
+    
+    // Show success notification
+    showNotification(`Data exported as ${format.toUpperCase()} successfully!`, 'success');
 } 
