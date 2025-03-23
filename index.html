@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aviation Coordinate Calculator</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+    <meta name="description" content="Aviation Coordinate Calculator for waypoints and fixes for flight simulation">
+    <!-- Leaflet for map preview -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-plane"></i> Aviation Coordinate Calculator</h1>
+            <div class="keyboard-shortcuts">
+                <button id="shortcuts-toggle" aria-label="Show keyboard shortcuts">
+                    <i class="fas fa-keyboard"></i> Keyboard Shortcuts
+                </button>
+            </div>
+        </header>
+
+        <div class="tabs" role="tablist">
+            <button class="tab-btn active" data-mode="WAYPOINT" role="tab" aria-selected="true" id="tab-waypoint" aria-controls="waypoint-calculator" tabindex="0">WAYPOINT</button>
+            <button class="tab-btn" data-mode="FIX" role="tab" aria-selected="false" id="tab-fix" aria-controls="fix-calculator" tabindex="0">FIX</button>
+        </div>
+
+        <section class="file-selection">
+            <h2><i class="fas fa-file-alt"></i> File Selection</h2>
+            <div class="file-inputs">
+                <div class="file-input">
+                    <label for="fix-file">FIX File:</label>
+                    <input type="file" id="fix-file" accept=".dat" aria-describedby="fix-file-display">
+                    <label for="fix-file" class="file-label">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span>Choose a FIX file or drag it here</span>
+                    </label>
+                    <div class="file-display" id="fix-file-display">No file selected</div>
+                </div>
+                <div class="file-input">
+                    <label for="nav-file">NAV File:</label>
+                    <input type="file" id="nav-file" accept=".dat" aria-describedby="nav-file-display">
+                    <label for="nav-file" class="file-label">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span>Choose a NAV file or drag it here</span>
+                    </label>
+                    <div class="file-display" id="nav-file-display">No file selected</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Favorites panel -->
+        <section class="favorites-panel" id="favorites-panel">
+            <h2><i class="fas fa-star"></i> Saved Favorites</h2>
+            <div id="favorites-empty" class="favorites-empty">
+                <p>You don't have any saved calculations. Save your favorite calculations for quick access.</p>
+            </div>
+            <div id="favorites-list" class="favorites-list">
+                <!-- Favorites will be added here dynamically -->
+            </div>
+        </section>
+
+        <section class="calculator" id="waypoint-calculator" role="tabpanel" aria-labelledby="tab-waypoint">
+            <h2><i class="fas fa-location-crosshairs"></i> Waypoint Calculator</h2>
+            <div class="search-type">
+                <label for="waypoint-search-type">Search in File Type:</label>
+                <select id="waypoint-search-type" aria-label="Select file type for search">
+                    <option value="NAV">NAV</option>
+                    <option value="FIX">FIX</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="waypoint-identifier">
+                    VOR/DME/NDB Identifier:
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Enter the navigation aid identifier"></i>
+                </label>
+                <div class="input-with-button">
+                    <input type="text" id="waypoint-identifier" placeholder="Enter identifier" aria-describedby="waypoint-identifier-error" accesskey="i">
+                    <button id="search-waypoint-btn" class="btn-primary" accesskey="s"><i class="fas fa-search"></i> Search</button>
+                </div>
+                <div class="error-message" id="waypoint-identifier-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="waypoint-coords">
+                    Coordinates (Lat Lon):
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Format: latitude longitude (e.g. 51.2345 -0.5432)"></i>
+                </label>
+                <input type="text" id="waypoint-coords" placeholder="Latitude Longitude" aria-describedby="waypoint-coords-error">
+                <div class="error-message" id="waypoint-coords-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="magnetic-bearing">
+                    Magnetic Bearing (°):
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Value between 0 and 359 degrees"></i>
+                </label>
+                <input type="number" id="magnetic-bearing" placeholder="0-359" min="0" max="359" aria-describedby="magnetic-bearing-error">
+                <div class="error-message" id="magnetic-bearing-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="distance">
+                    Distance (NM):
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Distance in nautical miles"></i>
+                </label>
+                <input type="number" id="distance" placeholder="Enter distance" min="0" step="0.1" aria-describedby="distance-error">
+                <div class="error-message" id="distance-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="declination">
+                    Magnetic Declination (°):
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Magnetic declination at location"></i>
+                </label>
+                <input type="number" id="declination" placeholder="Enter declination" step="0.1" aria-describedby="declination-error">
+                <div class="error-message" id="declination-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="airport-code">
+                    Airport Code:
+                    <i class="fas fa-info-circle tooltip" data-tooltip="4-letter ICAO airport code"></i>
+                </label>
+                <input type="text" id="airport-code" placeholder="4-letter code" maxlength="4" aria-describedby="airport-code-error">
+                <div class="error-message" id="airport-code-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="vor-identifier">
+                    VOR Identifier:
+                    <i class="fas fa-info-circle tooltip" data-tooltip="1-3 letter VOR identifier"></i>
+                </label>
+                <input type="text" id="vor-identifier" placeholder="1-3 letters" maxlength="3" aria-describedby="vor-identifier-error">
+                <div class="error-message" id="vor-identifier-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="operation-type">Operation Type:</label>
+                <select id="operation-type" aria-label="Select operation type">
+                    <option value="Departure">Departure</option>
+                    <option value="Arrival">Arrival</option>
+                    <option value="Approach">Approach</option>
+                </select>
+            </div>
+            <div class="action-row">
+                <button id="calculate-waypoint-btn" class="btn-calculate" accesskey="c">
+                    <i class="fas fa-calculator"></i> Calculate Waypoint
+                    <span class="loader" id="waypoint-loader"></span>
+                </button>
+                <button id="toggle-map-waypoint" class="btn-toggle-map">
+                    <i class="fas fa-map-marked-alt"></i> Toggle Map
+                </button>
+            </div>
+            
+            <!-- Map preview for waypoint -->
+            <div class="map-preview" id="waypoint-map-preview">
+                <div id="waypoint-map" class="map-container"></div>
+                <div class="map-placeholder" id="waypoint-map-placeholder">
+                    Enter coordinates to see them on the map
+                </div>
+            </div>
+        </section>
+
+        <section class="calculator" id="fix-calculator" style="display: none;" role="tabpanel" aria-labelledby="tab-fix">
+            <h2><i class="fas fa-map-marker-alt"></i> Fix Calculator</h2>
+            <div class="search-type">
+                <label for="fix-search-type">Search in File Type:</label>
+                <select id="fix-search-type" aria-label="Select file type for search">
+                    <option value="FIX">FIX</option>
+                    <option value="NAV">NAV</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="fix-identifier">
+                    FIX Identifier:
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Enter the fix point identifier"></i>
+                </label>
+                <div class="input-with-button">
+                    <input type="text" id="fix-identifier" placeholder="Enter identifier" aria-describedby="fix-identifier-error" accesskey="i">
+                    <button id="search-fix-btn" class="btn-primary" accesskey="s"><i class="fas fa-search"></i> Search</button>
+                </div>
+                <div class="error-message" id="fix-identifier-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="fix-coords">
+                    FIX Coordinates (Lat Lon):
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Format: latitude longitude (e.g. 51.2345 -0.5432)"></i>
+                </label>
+                <input type="text" id="fix-coords" placeholder="Latitude Longitude" aria-describedby="fix-coords-error">
+                <div class="error-message" id="fix-coords-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="fix-type">FIX Type:</label>
+                <select id="fix-type" aria-label="Select fix type">
+                    <option value="VORDME">VORDME</option>
+                    <option value="VOR">VOR</option>
+                    <option value="NDBDME">NDBDME</option>
+                    <option value="NDB">NDB</option>
+                    <option value="ILS">ILS</option>
+                    <option value="RNP">RNP</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="fix-usage">FIX Usage:</label>
+                <select id="fix-usage" aria-label="Select fix usage">
+                    <option value="Final approach fix">Final approach fix</option>
+                    <option value="Initial approach fix">Initial approach fix</option>
+                    <option value="Intermediate approach fix">Intermediate approach fix</option>
+                    <option value="Final approach course fix">Final approach course fix</option>
+                    <option value="Missed approach point fix">Missed approach point fix</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="runway-code">
+                    Runway Code:
+                    <i class="fas fa-info-circle tooltip" data-tooltip="Two-digit runway code (00-99)"></i>
+                </label>
+                <input type="number" id="runway-code" placeholder="0-99" min="0" max="99" aria-describedby="runway-code-error">
+                <div class="error-message" id="runway-code-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="fix-airport-code">
+                    Airport Code:
+                    <i class="fas fa-info-circle tooltip" data-tooltip="4-letter ICAO airport code"></i>
+                </label>
+                <input type="text" id="fix-airport-code" placeholder="4-letter code" maxlength="4" aria-describedby="fix-airport-code-error">
+                <div class="error-message" id="fix-airport-code-error"></div>
+            </div>
+            <div class="input-group">
+                <label for="fix-operation-type">Operation Type:</label>
+                <select id="fix-operation-type" aria-label="Select operation type">
+                    <option value="Departure">Departure</option>
+                    <option value="Arrival">Arrival</option>
+                    <option value="Approach">Approach</option>
+                </select>
+            </div>
+            <div class="action-row">
+                <button id="calculate-fix-btn" class="btn-calculate" accesskey="c">
+                    <i class="fas fa-calculator"></i> Calculate FIX
+                    <span class="loader" id="fix-loader"></span>
+                </button>
+                <button id="toggle-map-fix" class="btn-toggle-map">
+                    <i class="fas fa-map-marked-alt"></i> Toggle Map
+                </button>
+            </div>
+            
+            <!-- Map preview for fix -->
+            <div class="map-preview" id="fix-map-preview">
+                <div id="fix-map" class="map-container"></div>
+                <div class="map-placeholder" id="fix-map-placeholder">
+                    Enter coordinates to see them on the map
+                </div>
+            </div>
+        </section>
+
+        <section class="output-section">
+            <h2><i class="fas fa-clipboard-list"></i> Output Result</h2>
+            <div class="output-container">
+                <textarea id="output-result" readonly aria-label="Calculation result"></textarea>
+                <div class="output-actions">
+                    <button id="save-favorite-btn" class="bookmark-btn" aria-label="Save as favorite">
+                        <i class="far fa-star"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button id="clear-btn" class="btn-secondary" accesskey="r"><i class="fas fa-eraser"></i> Clear Input</button>
+                <button id="copy-btn" class="btn-secondary" accesskey="p"><i class="fas fa-copy"></i> Copy Result</button>
+                <button id="export-btn" class="btn-secondary"><i class="fas fa-file-export"></i> Export</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal for duplicate entries -->
+    <div id="modal" class="modal" role="dialog" aria-labelledby="modal-title" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close" aria-label="Close">&times;</span>
+            <h2 id="modal-title">Choose Entry</h2>
+            <p>Multiple entries found. Please choose one:</p>
+            <div id="choices" role="radiogroup"></div>
+            <button id="confirm-choice" class="btn-primary">Confirm</button>
+        </div>
+    </div>
+
+    <!-- Save Favorite Modal -->
+    <div id="favorite-modal" class="modal" role="dialog" aria-labelledby="favorite-modal-title" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close" aria-label="Close">&times;</span>
+            <h2 id="favorite-modal-title">Save as Favorite</h2>
+            <div class="input-group">
+                <label for="favorite-name">Name for this calculation:</label>
+                <input type="text" id="favorite-name" placeholder="E.g., KJFK Approach">
+            </div>
+            <button id="save-favorite-confirm" class="btn-primary">Save</button>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal" role="dialog" aria-labelledby="export-modal-title" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close" aria-label="Close">&times;</span>
+            <h2 id="export-modal-title">Export Data</h2>
+            <div class="export-options">
+                <button id="export-json" class="btn-secondary"><i class="fas fa-file-code"></i> JSON</button>
+                <button id="export-csv" class="btn-secondary"><i class="fas fa-file-csv"></i> CSV</button>
+                <button id="export-txt" class="btn-secondary"><i class="fas fa-file-alt"></i> Text</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success message -->
+    <div class="success-message" id="copy-success" role="alert" aria-live="polite">
+        <i class="fas fa-check-circle"></i> Result copied to clipboard!
+    </div>
+    
+    <!-- Keyboard shortcuts dialog -->
+    <div id="shortcuts-modal" class="modal" role="dialog" aria-labelledby="shortcuts-modal-title" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close" aria-label="Close">&times;</span>
+            <h2 id="shortcuts-modal-title">Keyboard Shortcuts</h2>
+            <div class="shortcuts-grid">
+                <div class="shortcut-item">
+                    <span class="key">Alt + W</span>
+                    <span class="description">Switch to Waypoint tab</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + F</span>
+                    <span class="description">Switch to Fix tab</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + S</span>
+                    <span class="description">Search for identifier</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + C</span>
+                    <span class="description">Calculate</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + R</span>
+                    <span class="description">Reset/Clear inputs</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + P</span>
+                    <span class="description">Copy output to clipboard</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + I</span>
+                    <span class="description">Focus on identifier field</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + D</span>
+                    <span class="description">Toggle dark/light mode</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + K</span>
+                    <span class="description">Show/hide this shortcuts guide</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + M</span>
+                    <span class="description">Toggle map preview</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="key">Alt + H</span>
+                    <span class="description">View calculation history</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History drawer -->
+    <button class="history-toggle" id="history-toggle" aria-label="View calculation history" accesskey="h">
+        <i class="fas fa-history"></i>
+    </button>
+    
+    <div class="history-drawer" id="history-drawer">
+        <h2><i class="fas fa-history"></i> Calculation History</h2>
+        <div id="history-list">
+            <!-- History items will be added here dynamically -->
+        </div>
+        <div id="history-empty" class="history-empty">
+            <p>No calculation history yet.</p>
+        </div>
+        <button class="btn-secondary" id="clear-history">Clear History</button>
+    </div>
+
+    <!-- Theme toggle button -->
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark/light mode" accesskey="d">
+        <i class="fas fa-moon" id="theme-icon"></i>
+    </button>
+
+    <script src="script.js"></script>
+</body>
+</html> 
